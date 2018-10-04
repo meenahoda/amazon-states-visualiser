@@ -93,141 +93,141 @@
 </style>
 
 <script>
-  import * as stateMachines from '../state-machines'
-  import * as opts from '../assets/graph-opts.json'
-  import Brace from 'vue-bulma-brace'
-  import * as brace from 'brace'
-  import * as flowchart from 'flowchart.js'
-  import InspectModal from 'components/StateInspector.vue'
+import * as stateMachines from '../state-machines'
+import * as opts from '../assets/graph-opts.json'
+import Brace from 'vue-bulma-brace'
+import * as brace from 'brace'
+import * as flowchart from 'flowchart.js'
+import InspectModal from 'components/StateInspector.vue'
 
-  export default {
-    name: 'PageIndex',
-    components: {
-      Brace,
-      InspectModal
+export default {
+  name: 'PageIndex',
+  components: {
+    Brace,
+    InspectModal
+  },
+  data: function () {
+    return {
+      stateCode: '',
+      displaying: false,
+      stateMachines,
+      modalOpen: false,
+      modalData: {},
+      modalId: ''
+    }
+  },
+  methods: {
+    selectStateMachine (key) {
+      this.stateCode = JSON.stringify(this.stateMachines[key], null, 2)
+      this.refresh()
     },
-    data: function () {
-      return {
-        stateCode: '',
-        displaying: false,
-        stateMachines,
-        modalOpen: false,
-        modalData: {},
-        modalId: ''
-      }
+    toggleModal (id) {
+      this.modalOpen = true
+      this.modalId = id
+      this.modalData = JSON.parse(this.stateCode).States[id]
     },
-    methods: {
-      selectStateMachine (key) {
-        this.stateCode = JSON.stringify(this.stateMachines[key], null, 2)
-        this.refresh()
-      },
-      toggleModal (id) {
-        this.modalOpen = true
-        this.modalId = id
-        this.modalData = JSON.parse(this.stateCode).States[id]
-      },
-      codeChange (e) {
-        this.stateCode = e
-      },
-      refresh () {
-        try {
-          document.getElementById('diagram').innerHTML = ''
-          this.refreshEditor()
-          parse(this.stateCode)
-          this.getSVGElems()
-          this.displaying = true
-        } catch (e) {
-          console.log('Error:', e)
-          this.$q.notify({
-            type: 'warning',
-            message: 'There was an error.',
-            position: 'top'
-          })
-        }
-      },
-      clear () {
-        this.stateCode = ''
-        this.displaying = false
+    codeChange (e) {
+      this.stateCode = e
+    },
+    refresh () {
+      try {
+        document.getElementById('diagram').innerHTML = ''
         this.refreshEditor()
-      },
-      refreshEditor () {
-        this.editor.session.setValue(this.stateCode)
-      },
-      getSVGElems () {
-        const shapes = []
-        const text = []
-        const svg = document.getElementsByTagName('svg')
-        svg[0].childNodes.forEach(node => {
-          if (node.nodeName === 'rect') shapes.push(node)
-          else if (node.nodeName === 'text') text.push(node)
-        })
-
-        shapes.forEach((shape, idx) => {
-          const stateId = text[idx].childNodes[0].innerHTML
-          shape.addEventListener('click', () => {
-            this.toggleModal(stateId)
-          })
+        parse(this.stateCode)
+        this.getSVGElems()
+        this.displaying = true
+      } catch (e) {
+        console.log('Error:', e)
+        this.$q.notify({
+          type: 'warning',
+          message: 'There was an error.',
+          position: 'top'
         })
       }
     },
-      mounted () {
-        this.editor = brace.edit('vue-bulma-editor')
-        this.stateCode = JSON.stringify(stateMachines['help'], null, 2)
-        this.refreshEditor()
-      }
+    clear () {
+      this.stateCode = ''
+      this.displaying = false
+      this.refreshEditor()
+    },
+    refreshEditor () {
+      this.editor.session.setValue(this.stateCode)
+    },
+    getSVGElems () {
+      const shapes = []
+      const text = []
+      const svg = document.getElementsByTagName('svg')
+      svg[0].childNodes.forEach(node => {
+        if (node.nodeName === 'rect') shapes.push(node)
+        else if (node.nodeName === 'text') text.push(node)
+      })
+
+      shapes.forEach((shape, idx) => {
+        const stateId = text[idx].childNodes[0].innerHTML
+        shape.addEventListener('click', () => {
+          this.toggleModal(stateId)
+        })
+      })
     }
+  },
+  mounted () {
+    this.editor = brace.edit('vue-bulma-editor')
+    this.stateCode = JSON.stringify(stateMachines['help'], null, 2)
+    this.refreshEditor()
+  }
+}
 
-    const parse = stateMachine => {
-      const flatten = (sm, states) => {
-        if (sm.States) {
-          Object.entries(sm.States).forEach(([key, value]) => {
-            if (!states[key]) states[key] = value
+const parse = stateMachine => {
+  const flatten = (sm, states) => {
+    if (sm.States) {
+      Object.entries(sm.States).forEach(([key, value]) => {
+        if (!states[key]) states[key] = value
 
-            if (value.Branches) {
-              value.Branches.forEach(branch => {
-                flatten(branch, states)
-              })
-            }
+        if (value.Branches) {
+          value.Branches.forEach(branch => {
+            flatten(branch, states)
           })
         }
-      }
+      })
+    }
+  }
 
-      // Flatten states
-      const sm = JSON.parse(stateMachine)
-      const states = {}
-      flatten(sm, states)
+  // Flatten states
+  const sm = JSON.parse(stateMachine)
+  const states = {}
+  flatten(sm, states)
 
-      console.log('STATES', states)
+  console.log('STATES', states)
 
-      const steps = ['start=>start: Start', 'end=>end: End']
-      const flow = ['start']
+  const steps = ['start=>start: Start', 'end=>end: End']
+  const flow = ['start']
 
-      const parseState = (key, state) => {
-        console.log(key, state)
+  const parseState = (key, state) => {
+    console.log(key, state)
 
-        if (state.Type === 'Task') {
-          flow.push(key)
-          steps.push(`${key}=>operation: ${key}`)
-        }
-
-        if (state.Next) {
-          parseState(state.Next, states[state.Next])
-        }
-      }
-
-      parseState(sm.StartAt, states[sm.StartAt])
-      flow.push('end')
-      const flowCode = `${steps.join('\n')}\n${flow.join('->')}`
-
-      console.log('STEPS', steps)
-      console.log('FLOW', flow)
-      console.log(flowCode)
-
-      const diagram = flowchart.parse(flowCode)
-      diagram.drawSVG('diagram', opts.default)
+    if (state.Type === 'Task') {
+      flow.push(key)
+      steps.push(`${key}=>operation: ${key}`)
     }
 
-  /*
+    if (state.Next) {
+      parseState(state.Next, states[state.Next])
+    }
+  }
+
+  parseState(sm.StartAt, states[sm.StartAt])
+  flow.push('end')
+  const flowCode = `${steps.join('\n')}\n${flow.join('->')}`
+
+  console.log('STEPS', steps)
+  console.log('FLOW', flow)
+  console.log(flowCode)
+
+  const diagram = flowchart.parse(flowCode)
+  diagram.drawSVG('diagram', opts.default)
+}
+
+/*
   parallel e.g.
 
   start=>start
@@ -267,9 +267,9 @@
         ------------
               |
               G
-  */
+*/
 
-  /*
+/*
   choice e.g.
 
   st=>start
