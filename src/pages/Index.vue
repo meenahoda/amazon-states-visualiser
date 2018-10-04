@@ -22,8 +22,8 @@
         </q-btn-dropdown>
       </q-toolbar>
     </q-layout-header>
-    <div class="row" style="max-height: calc(100vh - 50px); min-height: calc(100vh - 50px);">
-      <div class="col-6 col-md-6 shadow-6">
+    <div class="row">
+      <div class="col-6 shadow-6">
         <brace
           fontsize="12px"
           theme="clouds_midnight"
@@ -32,11 +32,11 @@
           softwrap="free"
           selectionstyle="text"
           highlightline
-          style="height: 100%; width: 100%"
+          style="height: calc(100vh - 50px); width: 100%"
           @code-change="codeChange"
         />
       </div>
-      <div class="relative-position col-6">
+      <div class="col-6">
         <inspect-modal class="col-6" :opened="modalOpen" :data="modalData" :id="modalId" @close="modalOpen=false"/>
         <div v-show="displaying === false" class="col-6 q-pa-xl">
           <p class="q-display-3 text-weight-thin">Select a state machine example to visualise!</p>
