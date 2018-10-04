@@ -38,16 +38,51 @@
       </div>
       <div class="col-6">
         <inspect-modal class="col-6" :opened="modalOpen" :data="modalData" :id="modalId" @close="modalOpen=false"/>
-        <div v-show="displaying === false" class="col-6 q-pa-xl">
+        <div class="col-6 q-pa-xl" v-if="reset">
           <p class="q-display-3 text-weight-thin">Select a state machine example to visualise!</p>
         </div>
+        <div class="col-6 q-pa-xl scroll" v-if="!reset" style="max-height: calc(100vh - 50px);">
+          <q-card class="bg-faded q-mb-md">
+            <q-card-title>Start at: {{JSON.parse(stateCode).StartAt}}</q-card-title>
+          </q-card>
+          <q-card
+            v-for="(value, key) in flattenedStates"
+            :key="key"
+            class="bg-tertiary q-mb-md"
+          >
+            <q-card-title>
+              <div class="row">
+                <div class="col">{{key}}</div>
+                <div class="col text-right">
+                  <q-chip color="faded" dense square>{{value.Type}}</q-chip>
+                </div>
+              </div>
+            </q-card-title>
+            <q-card-main>
+              <div v-if="value.Type === 'Choice'">
+                <div
+                  v-for="(choice, idx) in value.Choices"
+                  :key="idx"
+                >
+                  <div>{{formatChoice(choice)}}</div>
+                </div>
+              </div>
 
-        <div
-          id="diagram"
-          v-show="displaying === true"
-          class="col-6 q-pa-xl scroll text-center"
-          style="height: 90%; width: 100%;"
-        ></div>
+              <div v-if="value.Type === 'Parallel'">
+                <div
+                  v-for="(branch, idx) in value.Branches"
+                  :key="idx"
+                >
+                  Branch {{idx + 1}}
+                  Start at: {{branch.StartAt}}
+                </div>
+              </div>
+
+              <div v-if="value.Next">Go to: {{value.Next}}</div>
+              <div v-if="value.End">End</div>
+            </q-card-main>
+          </q-card>
+        </div>
         <p class="q-caption text-light fixed-bottom-right q-pr-md">
           Inspired by the
           <a class="text-info" href="https://github.com/wmfs/tymly-monorepo">Tymly</a>
@@ -94,10 +129,8 @@
 
 <script>
 import * as stateMachines from '../state-machines'
-import * as opts from '../assets/graph-opts.json'
 import Brace from 'vue-bulma-brace'
 import * as brace from 'brace'
-import * as flowchart from 'flowchart.js'
 import InspectModal from 'components/StateInspector.vue'
 
 export default {
@@ -109,16 +142,18 @@ export default {
   data: function () {
     return {
       stateCode: '',
-      displaying: false,
+      flattenedStates: {},
       stateMachines,
       modalOpen: false,
       modalData: {},
-      modalId: ''
+      modalId: '',
+      reset: true
     }
   },
   methods: {
     selectStateMachine (key) {
       this.stateCode = JSON.stringify(this.stateMachines[key], null, 2)
+      this.refreshEditor()
       this.refresh()
     },
     toggleModal (id) {
@@ -131,11 +166,8 @@ export default {
     },
     refresh () {
       try {
-        document.getElementById('diagram').innerHTML = ''
-        this.refreshEditor()
-        parse(this.stateCode)
-        this.getSVGElems()
-        this.displaying = true
+        this.reset = false
+        this.flattenStates(this.stateCode)
       } catch (e) {
         console.log('Error:', e)
         this.$q.notify({
@@ -147,27 +179,35 @@ export default {
     },
     clear () {
       this.stateCode = ''
-      this.displaying = false
       this.refreshEditor()
+      this.reset = true
     },
     refreshEditor () {
       this.editor.session.setValue(this.stateCode)
     },
-    getSVGElems () {
-      const shapes = []
-      const text = []
-      const svg = document.getElementsByTagName('svg')
-      svg[0].childNodes.forEach(node => {
-        if (node.nodeName === 'rect') shapes.push(node)
-        else if (node.nodeName === 'text') text.push(node)
-      })
+    flattenStates (stateMachine) {
+      this.flattenedStates = {}
+      const flatten = sm => {
+        if (sm.States) {
+          Object.entries(sm.States).forEach(([key, value]) => {
+            if (!this.flattenedStates[key]) this.flattenedStates[key] = value
 
-      shapes.forEach((shape, idx) => {
-        const stateId = text[idx].childNodes[0].innerHTML
-        shape.addEventListener('click', () => {
-          this.toggleModal(stateId)
-        })
-      })
+            if (value.Branches) {
+              value.Branches.forEach(branch => {
+                flatten(branch, this.flattenedStates)
+              })
+            }
+          })
+        }
+      }
+
+      flatten(JSON.parse(stateMachine))
+    },
+    formatChoice (choice) {
+      if (choice.StringEquals) {
+        return `If ${choice.Variable} is equal to ${choice.StringEquals} then go to: ${choice.Next}`
+      }
+      // todo: other types of choices
     }
   },
   mounted () {
@@ -176,110 +216,4 @@ export default {
     this.refreshEditor()
   }
 }
-
-const parse = stateMachine => {
-  const flatten = (sm, states) => {
-    if (sm.States) {
-      Object.entries(sm.States).forEach(([key, value]) => {
-        if (!states[key]) states[key] = value
-
-        if (value.Branches) {
-          value.Branches.forEach(branch => {
-            flatten(branch, states)
-          })
-        }
-      })
-    }
-  }
-
-  // Flatten states
-  const sm = JSON.parse(stateMachine)
-  const states = {}
-  flatten(sm, states)
-
-  console.log('STATES', states)
-
-  const steps = ['start=>start: Start', 'end=>end: End']
-  const flow = ['start']
-
-  const parseState = (key, state) => {
-    console.log(key, state)
-
-    if (state.Type === 'Task') {
-      flow.push(key)
-      steps.push(`${key}=>operation: ${key}`)
-    }
-
-    if (state.Next) {
-      parseState(state.Next, states[state.Next])
-    }
-  }
-
-  parseState(sm.StartAt, states[sm.StartAt])
-  flow.push('end')
-  const flowCode = `${steps.join('\n')}\n${flow.join('->')}`
-
-  console.log('STEPS', steps)
-  console.log('FLOW', flow)
-  console.log(flowCode)
-
-  const diagram = flowchart.parse(flowCode)
-  diagram.drawSVG('diagram', opts.default)
-}
-
-/*
-  parallel e.g.
-
-  start=>start
-  end=>end
-  Parallel1=>parallel: Parallel1
-  Parallel2=>parallel: Parallel2
-  A=>operation: A
-  B=>operation: B
-  C=>operation: C
-  D=>operation: D
-  E=>operation: E
-  F=>operation: F
-  G=>operation: G
-
-  start->Parallel1
-  Parallel1(path1, left)->A->G
-  Parallel1(path2, bottom)->B->Parallel2
-  Parallel2(path1, bottom)->C->F->G
-  Parallel2(path2, right)->D->E->F->G
-  G->end
-
-               |
-           Parallel1
-           |       |
-           A       B
-       (+4 secs)   |
-        |      Parallel2
-        |      |       |
-        |      C       D
-        |  (+2 secs)   |
-        |      |       E
-        |      |       |
-        |      ---------
-        |          |
-        |          F
-        |          |
-        ------------
-              |
-              G
-*/
-
-/*
-  choice e.g.
-
-  st=>start
-  e=>end
-  cond=>condition: Add or Subtract?
-  op1=>operation: Add
-  op2=>operation: Subtract
-
-  st->cond
-  cond(yes)->op1->e
-  cond(no)->op2->e
-  */
 </script>
